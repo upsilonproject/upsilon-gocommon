@@ -5,7 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func EncodeMessage(in interface{}) []byte {
+func Encode(in interface{}) []byte {
 	jsonBytes, err := json.Marshal(in)
 
 	if err != nil {
@@ -13,4 +13,8 @@ func EncodeMessage(in interface{}) []byte {
 	}
 
 	return jsonBytes
+}
+
+func Decode(in []byte, typ interface{}) interface{} {
+	return json.Unmarshal(in, typ)
 }

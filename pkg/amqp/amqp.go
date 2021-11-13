@@ -1,22 +1,47 @@
 package amqp
 
 import (
+	"github.com/teris-io/shortid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"time"
+	"reflect"
+	"os"
+	"sync"
 )
 
 var (
 	conn    *amqp.Connection
 	channel *amqp.Channel
+	sid *shortid.Shortid;
+	ConnectionIdentifier string
+	channelMutex sync.Mutex
 )
 
-func GetChannel(channelName string) (*amqp.Channel, error) {
+// A dumb Delivery wrapper, so dependencies on this lib don't have to depened on the streadway lib
+type Delivery struct {
+	Message amqp.Delivery
+}
+
+type HandlerFunc func(d Delivery)
+
+func GetChannel() (*amqp.Channel, error) {
 	var err error
 
+	channelMutex.Lock()
+
 	if channel == nil {
+		log.Info("GetChannel() - Creating conn")
+
+		sid, err = shortid.New(1, shortid.DefaultABC, 2342)
+
+		if err != nil {
+			return nil, err
+		}
+
 		cfg := amqp.Config{
 			Properties: amqp.Table{
-				"connection_name": "upsilon-drone " + channelName,
+				"connection_name": ConnectionIdentifier + " on " + getHostname(),
 			},
 		}
 
@@ -33,13 +58,130 @@ func GetChannel(channelName string) (*amqp.Channel, error) {
 		}
 
 		channel, err = conn.Channel()
+		log.Info("Channel assigned")
 	}
+
+	channelMutex.Unlock()
 
 	return channel, err
 }
 
-func StartServerListener() {
-	//c, err := GetChannel()
+func Publish(c *amqp.Channel, routingKey string, msg amqp.Publishing) error {
+	err := c.Publish(
+		"ex_upsilon",
+		routingKey,
+		false, // mandatory
+		false, // immediate
+		msg,
+	)
 
+	return err
+}
+
+func getKey(msg interface{}) string {
+    if t := reflect.TypeOf(msg); t.Kind() == reflect.Ptr {
+        return t.Elem().Name()
+    } else {
+        return t.Name()
+    }
+}
+
+func PublishPb(c *amqp.Channel, msg interface{}) {
+	env := NewEnvelope(Encode(msg))
+
+	msgKey := getKey(msg)
+
+	log.Infof("Publish: %+v", msgKey)
+
+	Publish(c, msgKey, env)
+}
+
+func getHostname() string {
+	hostname, err := os.Hostname()
+
+	if err != nil {
+		return "unknown"
+	}
+
+	return hostname
+}
+
+func Consume(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) error {
+	id, _ := sid.Generate()
+
+	queueName := getHostname() + "-" + id + "-" + deliveryTag
+
+	_, err := c.QueueDeclare(
+		queueName,
+		false, // durable
+		true, // delete when unused
+		false, // exclusive
+		true, // nowait
+		nil, // args
+	)
+
+	if err != nil {
+		return err
+	}
+
+	err = c.QueueBind(
+		queueName, 
+		deliveryTag, // key
+		"ex_upsilon",
+		true, // nowait
+		nil, // args
+	)
+
+	if err != nil {
+		return err
+	}
+
+	var done chan error;
+
+	deliveries, err := c.Consume(
+		queueName,  // name
+		"consumer_tag",      // consumerTag,
+		false,      // noAck
+		false,      // exclusive
+		false,      // noLocal
+		false,      // noWait
+		nil,        // arguments
+	)
+
+	if err != nil {
+		return err
+	}
+
+	go consumeDeliveries(deliveries, done, handlerFunc)	
+
+	for {
+		time.Sleep(10 * time.Second)
+	}
+
+	return nil
+}
+
+func NewEnvelope(body []byte) amqp.Publishing {
+	return amqp.Publishing{
+		DeliveryMode: amqp.Persistent,
+		Timestamp: time.Now(),
+		ContentType: "application/binary",
+		Body: body,
+	}
+}
+
+func consumeDeliveries(deliveries <-chan amqp.Delivery, done chan error, handlerFunc HandlerFunc) {
+	for d := range deliveries {
+		handlerFunc(Delivery {
+			Message: d,
+		})
+	}
+
+	log.Infof("handle: deliveries channel closed")
+
+	done <- nil
+}
+
+func StartServerListener() {
 	log.Info("Started listening")
 }
