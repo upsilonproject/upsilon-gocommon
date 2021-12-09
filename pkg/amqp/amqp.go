@@ -38,7 +38,7 @@ func getDialURL() string {
 		"port": AmqpPort,
 	}).Infof("AMQP Dial URL")
 
-	return fmt.Sprintf("amqp://%v:%v/%v:%v", AmqpUser, AmqpPass, AmqpHost, AmqpPort)
+	return fmt.Sprintf("amqp://%v:%v@%v:%v", AmqpUser, AmqpPass, AmqpHost, AmqpPort)
 }
 
 func GetChannel() (*amqp.Channel, error) {
