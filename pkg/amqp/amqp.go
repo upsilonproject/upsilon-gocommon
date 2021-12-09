@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"os"
 	"sync"
+	"fmt"
 )
 
 var (
@@ -16,6 +17,11 @@ var (
 	sid *shortid.Shortid;
 	ConnectionIdentifier string
 	channelMutex sync.Mutex
+
+	AmqpHost string
+	AmqpUser string
+	AmqpPass string
+	AmqpPort int
 )
 
 // A dumb Delivery wrapper, so dependencies on this lib don't have to depened on the streadway lib
@@ -25,13 +31,23 @@ type Delivery struct {
 
 type HandlerFunc func(d Delivery)
 
+func getDialURL() string {
+	log.WithFields(log.Fields{
+		"host": AmqpHost,
+		"user": AmqpUser,
+		"port": AmqpPort,
+	}).Infof("AMQP Dial URL")
+
+	return fmt.Sprintf("amqp://%v:%v:%v:%v", AmqpUser, AmqpPass, AmqpHost, AmqpPort)
+}
+
 func GetChannel() (*amqp.Channel, error) {
 	var err error
 
 	channelMutex.Lock()
 
 	if channel == nil {
-		log.Info("GetChannel() - Creating conn")
+		log.Debugf("GetChannel() - Creating conn")
 
 		sid, err = shortid.New(1, shortid.DefaultABC, 2342)
 
@@ -45,7 +61,7 @@ func GetChannel() (*amqp.Channel, error) {
 			},
 		}
 
-		conn, err = amqp.DialConfig("amqp://guest:guest@upsilon.teratan.net:5672", cfg)
+		conn, err = amqp.DialConfig(getDialURL(), cfg)
 
 		if err != nil {
 			return nil, err
@@ -58,7 +74,7 @@ func GetChannel() (*amqp.Channel, error) {
 		}
 
 		channel, err = conn.Channel()
-		log.Info("Channel assigned")
+		log.Debugf("GetChannel() - Connected")
 	}
 
 	channelMutex.Unlock()
@@ -91,7 +107,7 @@ func PublishPb(c *amqp.Channel, msg interface{}) {
 
 	msgKey := getKey(msg)
 
-	log.Infof("Publish: %+v", msgKey)
+	log.Debugf("Publish: %+v", msgKey)
 
 	Publish(c, msgKey, env)
 }
