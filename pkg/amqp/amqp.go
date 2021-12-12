@@ -46,7 +46,7 @@ func GetChannel() (*amqp.Channel, error) {
 
 	channelMutex.Lock()
 
-	if channel == nil {
+	if channel == nil || conn == nil || conn.IsClosed() {
 		log.Debugf("GetChannel() - Creating conn")
 
 		sid, err = shortid.New(1, shortid.DefaultABC, 2342)
