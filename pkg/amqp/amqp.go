@@ -42,6 +42,7 @@ func getDialURL() string {
 		"host": AmqpHost,
 		"user": AmqpUser,
 		"port": AmqpPort,
+		"instance": InstanceId,
 	}).Infof("AMQP Dial URL")
 
 	return fmt.Sprintf("amqp://%v:%v@%v:%v", AmqpUser, AmqpPass, AmqpHost, AmqpPort)
