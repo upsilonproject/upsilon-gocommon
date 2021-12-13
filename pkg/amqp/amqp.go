@@ -18,11 +18,17 @@ var (
 	ConnectionIdentifier string
 	channelMutex sync.Mutex
 
+	InstanceId string
+
 	AmqpHost string
 	AmqpUser string
 	AmqpPass string
 	AmqpPort int
 )
+
+func init() {
+	InstanceId, _ = sid.Generate()
+}
 
 // A dumb Delivery wrapper, so dependencies on this lib don't have to depened on the streadway lib
 type Delivery struct {
@@ -123,9 +129,7 @@ func getHostname() string {
 }
 
 func Consume(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) error {
-	id, _ := sid.Generate()
-
-	queueName := getHostname() + "-" + id + "-" + deliveryTag
+	queueName := getHostname() + "-" + InstanceId + "-" + deliveryTag
 
 	_, err := c.QueueDeclare(
 		queueName,
