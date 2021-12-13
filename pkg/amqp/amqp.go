@@ -14,7 +14,6 @@ import (
 var (
 	conn    *amqp.Connection
 	channel *amqp.Channel
-	sid *shortid.Shortid;
 	ConnectionIdentifier string
 	channelMutex sync.Mutex
 
@@ -27,6 +26,12 @@ var (
 )
 
 func init() {
+	sid, err := shortid.New(1, shortid.DefaultABC, 2342)
+
+	if err != nil {
+		log.Fatalf("Could not generate AMQP shortid %v", err)
+	}
+
 	InstanceId, _ = sid.Generate()
 }
 
@@ -55,12 +60,6 @@ func GetChannel() (*amqp.Channel, error) {
 
 	if channel == nil || conn == nil || conn.IsClosed() {
 		log.Debugf("GetChannel() - Creating conn")
-
-		sid, err = shortid.New(1, shortid.DefaultABC, 2342)
-
-		if err != nil {
-			return nil, err
-		}
 
 		cfg := amqp.Config{
 			Properties: amqp.Table{
