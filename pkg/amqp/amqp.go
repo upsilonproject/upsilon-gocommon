@@ -156,7 +156,7 @@ func Consume(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) error
 
 	deliveries, err := c.Consume(
 		queueName,  // name
-		"consumer_tag",      // consumerTag,
+		"consume-" + deliveryTag, // consumer tag
 		false,      // noAck
 		false,      // exclusive
 		false,      // noLocal
