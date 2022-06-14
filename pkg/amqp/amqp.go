@@ -81,7 +81,7 @@ func getConn() (*amqp.Connection, error) {
 	connMutex.Lock()
 
 	if conn == nil || conn.IsClosed() {
-		log.Debugf("GetConn() - Creating conn")
+		log.Debugf("getConn() - Creating conn")
 
 		cfg := amqp.Config{
 			Properties: amqp.Table{
@@ -92,7 +92,9 @@ func getConn() (*amqp.Connection, error) {
 		conn, err = amqp.DialConfig(getDialURL(), cfg)
 
 		if err != nil {
-			log.Warnf("Could not connect: %s", err)
+			log.Warnf("getConn() - Could not connect: %s", err)
+			connMutex.Unlock()
+
 			return nil, err
 		}
 
@@ -116,10 +118,11 @@ func Publish(routingKey string, msg amqp.Publishing) error {
 	channel, err := GetChannel("Publish-" + routingKey)
 
 	if err != nil {
-		log.Errorf("%v", err)
+		log.Errorf("Publish error: %v", err)
+		return err
+	} else {
+		return PublishWithChannel(channel, routingKey, msg)
 	}
-
-	return PublishWithChannel(channel, routingKey, msg)
 }
 
 func PublishWithChannel(c *amqp.Channel, routingKey string, msg amqp.Publishing) error {
@@ -135,7 +138,12 @@ func PublishWithChannel(c *amqp.Channel, routingKey string, msg amqp.Publishing)
 }
 
 func PublishPb(msg interface{}) {
-	channel, _ := GetChannel("Publish-" + getKey(msg))
+	channel, err := GetChannel("Publish-" + getKey(msg))
+
+	if err != nil {
+		log.Errorf("PublishPb: %v", err)
+		return
+	}
 
 	PublishPbWithChannel(channel, msg)
 }
@@ -145,7 +153,7 @@ func PublishPbWithChannel(c *amqp.Channel, msg interface{}) {
 
 	msgKey := getKey(msg)
 
-	log.Debugf("Publish: %+v", msgKey)
+	log.Debugf("PublishPbWithChannel: %+v", msgKey)
 
 	Publish(msgKey, env)
 }
@@ -160,17 +168,21 @@ func getHostname() string {
 	return hostname
 }
 
-func Consume(deliveryTag string, handlerFunc HandlerFunc) error {
-	channel, err := GetChannel(deliveryTag)
+func Consume(deliveryTag string, handlerFunc HandlerFunc) {
+	for { 
+		channel, err := GetChannel(deliveryTag)
 
-	if err != nil {
-		log.Errorf("%v", err)
+		if err != nil {
+			log.Errorf("Get Channel error: %v", err)
+		} else {
+			consumeWithChannel(channel, deliveryTag, handlerFunc)
+		}
+		
+		time.Sleep(10 * time.Second)
 	}
-
-	return ConsumeWithChannel(channel, deliveryTag, handlerFunc)
 }
 
-func ConsumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) error {
+func consumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) {
 	queueName := getHostname() + "-" + InstanceId + "-" + deliveryTag
 
 	_, err := c.QueueDeclare(
@@ -183,7 +195,8 @@ func ConsumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc Handler
 	)
 
 	if err != nil {
-		return err
+		log.Warnf("Queue declare error: %v", err)
+		return
 	}
 
 	err = c.QueueBind(
@@ -195,32 +208,30 @@ func ConsumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc Handler
 	)
 
 	if err != nil {
-		return err
+		log.Warnf("Queue bind error: %v %v", deliveryTag, err)
+		return 
 	}
 
-	for {
-		log.Infof("Consumer channel creating for: %v", deliveryTag)
+	log.Infof("Consumer channel creating for: %v", deliveryTag)
 
-		deliveries, err := c.Consume(
-			queueName,  // name
-			"consume-" + deliveryTag, // consumer tag
-			false,      // noAck
-			false,      // exclusive
-			false,      // noLocal
-			false,      // noWait
-			nil,        // arguments
-		)
+	deliveries, err := c.Consume(
+		queueName,  // name
+		"consume-" + deliveryTag, // consumer tag
+		false,      // noAck
+		false,      // exclusive
+		false,      // noLocal
+		false,      // noWait
+		nil,        // arguments
+	)
 
-		if err != nil {
-			log.Warnf("Consumer channel creation error: %v %v", deliveryTag, err)
-		} else {
-			consumeDeliveries(deliveries, handlerFunc)	
-		
-			log.Infof("Consumer channel closed for: %v", deliveryTag)
-		}
-
-		time.Sleep(10 * time.Second)
+	if err != nil {
+		log.Warnf("Consumer channel creation error: %v %v", deliveryTag, err)
+		return
 	}
+
+	consumeDeliveries(deliveries, handlerFunc)	
+
+	log.Infof("Consumer channel closed for: %v", deliveryTag)
 }
 
 func NewEnvelope(body []byte) amqp.Publishing {
