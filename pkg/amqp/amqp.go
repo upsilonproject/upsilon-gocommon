@@ -106,7 +106,7 @@ func getConn() (*amqp.Connection, error) {
 	return conn, nil
 }
 
-func getKey(msg interface{}) string {
+func getMsgType(msg interface{}) string {
     if t := reflect.TypeOf(msg); t.Kind() == reflect.Ptr {
         return t.Elem().Name()
     } else {
@@ -138,7 +138,7 @@ func PublishWithChannel(c *amqp.Channel, routingKey string, msg amqp.Publishing)
 }
 
 func PublishPb(msg interface{}) {
-	channel, err := GetChannel("Publish-" + getKey(msg))
+	channel, err := GetChannel("Publish-" + getMsgType(msg))
 
 	if err != nil {
 		log.Errorf("PublishPb: %v", err)
@@ -149,13 +149,14 @@ func PublishPb(msg interface{}) {
 }
 
 func PublishPbWithChannel(c *amqp.Channel, msg interface{}) {
-	env := NewEnvelope(Encode(msg))
+	msgType := getMsgType(msg)
 
-	msgKey := getKey(msg)
+	env := newEnvelope(msgType, Encode(msg))
 
-	log.Debugf("PublishPbWithChannel: %+v", msgKey)
 
-	Publish(msgKey, env)
+	log.Debugf("PublishPbWithChannel: %+v", msgType)
+
+	Publish(msgType, env)
 }
 
 func getHostname() string {
@@ -234,11 +235,14 @@ func consumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc Handler
 	log.Infof("Consumer channel closed for: %v", deliveryTag)
 }
 
-func NewEnvelope(body []byte) amqp.Publishing {
+func newEnvelope(msgType string, body []byte) amqp.Publishing {
 	return amqp.Publishing{
 		DeliveryMode: amqp.Persistent,
 		Timestamp: time.Now(),
 		ContentType: "application/binary",
+		Headers: amqp.Table{
+			"Upsilon-Msg-Type": msgType,
+		},
 		Body: body,
 	}
 }
