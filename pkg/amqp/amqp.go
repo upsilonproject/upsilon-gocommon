@@ -156,7 +156,11 @@ func PublishPbWithChannel(c *amqp.Channel, msg interface{}) {
 
 	log.Debugf("PublishPbWithChannel: %+v", msgType)
 
-	Publish(msgType, env)
+	err := Publish(msgType, env)
+
+	if err != nil {
+		log.Errorf("PublishPbWithChannel: %+v", err)
+	}
 }
 
 func getHostname() string {
@@ -169,21 +173,30 @@ func getHostname() string {
 	return hostname
 }
 
-func Consume(deliveryTag string, handlerFunc HandlerFunc) {
-	for { 
+func Consume(deliveryTag string, handlerFunc HandlerFunc) *sync.WaitGroup {
+	chanReady := &sync.WaitGroup{}
+	chanReady.Add(1)
+
+	go consumeForever(chanReady, deliveryTag, handlerFunc)
+
+	return chanReady
+}
+
+func consumeForever(consumerReady *sync.WaitGroup, deliveryTag string, handlerFunc HandlerFunc) {
+	for {
 		channel, err := GetChannel(deliveryTag)
 
 		if err != nil {
 			log.Errorf("Get Channel error: %v", err)
 		} else {
-			consumeWithChannel(channel, deliveryTag, handlerFunc)
+			consumeWithChannel(consumerReady, channel, deliveryTag, handlerFunc)
 		}
-		
+
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func consumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) {
+func consumeWithChannel(consumerReady *sync.WaitGroup, c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) {
 	queueName := getHostname() + "-" + InstanceId + "-" + deliveryTag
 
 	_, err := c.QueueDeclare(
@@ -229,6 +242,8 @@ func consumeWithChannel(c *amqp.Channel, deliveryTag string, handlerFunc Handler
 		log.Warnf("Consumer channel creation error: %v %v", deliveryTag, err)
 		return
 	}
+
+	consumerReady.Done()
 
 	consumeDeliveries(deliveries, handlerFunc)	
 
