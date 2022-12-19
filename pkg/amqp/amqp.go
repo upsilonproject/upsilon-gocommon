@@ -153,7 +153,6 @@ func PublishPbWithChannel(c *amqp.Channel, msg interface{}) {
 
 	env := newEnvelope(msgType, Encode(msg))
 
-
 	log.Debugf("PublishPbWithChannel: %+v", msgType)
 
 	err := Publish(msgType, env)
@@ -173,30 +172,37 @@ func getHostname() string {
 	return hostname
 }
 
-func Consume(deliveryTag string, handlerFunc HandlerFunc) *sync.WaitGroup {
+func ConsumeSingle(deliveryTag string, handlerFunc HandlerFunc) (*sync.WaitGroup, *sync.WaitGroup) {
+	return Consume(deliveryTag, handlerFunc, 1)
+}
+
+func Consume(deliveryTag string, handlerFunc HandlerFunc, count int) (*sync.WaitGroup, *sync.WaitGroup) {
 	chanReady := &sync.WaitGroup{}
 	chanReady.Add(1)
 
-	go consumeForever(chanReady, deliveryTag, handlerFunc)
+	handlerDone := &sync.WaitGroup{}
+	handlerDone.Add(count)
 
-	return chanReady
+	go consumeForever(chanReady, handlerDone, deliveryTag, handlerFunc)
+
+	return chanReady, handlerDone
 }
 
-func consumeForever(consumerReady *sync.WaitGroup, deliveryTag string, handlerFunc HandlerFunc) {
+func consumeForever(consumerReady *sync.WaitGroup, handlerDone *sync.WaitGroup, deliveryTag string, handlerFunc HandlerFunc) {
 	for {
 		channel, err := GetChannel(deliveryTag)
 
 		if err != nil {
 			log.Errorf("Get Channel error: %v", err)
 		} else {
-			consumeWithChannel(consumerReady, channel, deliveryTag, handlerFunc)
+			consumeWithChannel(consumerReady, handlerDone, channel, deliveryTag, handlerFunc)
 		}
 
 		time.Sleep(10 * time.Second)
 	}
 }
 
-func consumeWithChannel(consumerReady *sync.WaitGroup, c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) {
+func consumeWithChannel(consumerReady *sync.WaitGroup, handlerWait *sync.WaitGroup, c *amqp.Channel, deliveryTag string, handlerFunc HandlerFunc) {
 	queueName := getHostname() + "-" + InstanceId + "-" + deliveryTag
 
 	_, err := c.QueueDeclare(
@@ -245,7 +251,7 @@ func consumeWithChannel(consumerReady *sync.WaitGroup, c *amqp.Channel, delivery
 
 	consumerReady.Done()
 
-	consumeDeliveries(deliveries, handlerFunc)	
+	consumeDeliveries(deliveries, handlerFunc, handlerWait)
 
 	log.Infof("Consumer channel closed for: %v", deliveryTag)
 }
@@ -262,11 +268,13 @@ func newEnvelope(msgType string, body []byte) amqp.Publishing {
 	}
 }
 
-func consumeDeliveries(deliveries <-chan amqp.Delivery, handlerFunc HandlerFunc) {
+func consumeDeliveries(deliveries <-chan amqp.Delivery, handlerFunc HandlerFunc, handlerWait *sync.WaitGroup) {
 	for d := range deliveries {
 		handlerFunc(Delivery {
 			Message: d,
 		})
+
+		handlerWait.Done()
 	}
 }
 
