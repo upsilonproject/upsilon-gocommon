@@ -15,6 +15,12 @@ func Encode(in interface{}) []byte {
 	return jsonBytes
 }
 
-func Decode(in []byte, typ interface{}) interface{} {
-	return json.Unmarshal(in, typ)
+func Decode(in []byte, typ interface{}) error {
+	err := json.Unmarshal(in, typ)
+
+	if err != nil {
+		log.Warnf("Unmarshal error: %+v", err)
+	}
+
+	return err
 }

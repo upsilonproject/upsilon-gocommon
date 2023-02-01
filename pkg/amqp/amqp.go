@@ -173,29 +173,40 @@ func getHostname() string {
 }
 
 func ConsumeSingle(deliveryTag string, handlerFunc HandlerFunc) (*sync.WaitGroup, *sync.WaitGroup) {
-	return Consume(deliveryTag, handlerFunc, 1)
+	return ConsumeCount(deliveryTag, handlerFunc, 1)
 }
 
-func Consume(deliveryTag string, handlerFunc HandlerFunc, count int) (*sync.WaitGroup, *sync.WaitGroup) {
+func ConsumeForever(deliveryTag string, handlerFunc HandlerFunc) (*sync.WaitGroup, *sync.WaitGroup) {
+	return ConsumeCount(deliveryTag, handlerFunc, 0);
+}
+
+func ConsumeCount(deliveryTag string, handlerFunc HandlerFunc, count int) (*sync.WaitGroup, *sync.WaitGroup) {
 	chanReady := &sync.WaitGroup{}
 	chanReady.Add(1)
 
-	handlerDone := &sync.WaitGroup{}
-	handlerDone.Add(count)
+	handlerWait := &sync.WaitGroup{}
 
-	go consumeForever(chanReady, handlerDone, deliveryTag, handlerFunc)
+	if count == 0 {
+		handlerWait.Add(1) // Wait() will never complete on this "dummy handler".
 
-	return chanReady, handlerDone
+		go consumeForever(chanReady, nil, deliveryTag, handlerFunc)
+	} else {
+		handlerWait.Add(count)
+
+		go consumeForever(chanReady, handlerWait, deliveryTag, handlerFunc)
+	}
+
+	return chanReady, handlerWait
 }
 
-func consumeForever(consumerReady *sync.WaitGroup, handlerDone *sync.WaitGroup, deliveryTag string, handlerFunc HandlerFunc) {
+func consumeForever(consumerReady *sync.WaitGroup, handlerWait *sync.WaitGroup, deliveryTag string, handlerFunc HandlerFunc) {
 	for {
 		channel, err := GetChannel(deliveryTag)
 
 		if err != nil {
 			log.Errorf("Get Channel error: %v", err)
 		} else {
-			consumeWithChannel(consumerReady, handlerDone, channel, deliveryTag, handlerFunc)
+			consumeWithChannel(consumerReady, handlerWait, channel, deliveryTag, handlerFunc)
 		}
 
 		time.Sleep(10 * time.Second)
@@ -274,7 +285,9 @@ func consumeDeliveries(deliveries <-chan amqp.Delivery, handlerFunc HandlerFunc,
 			Message: d,
 		})
 
-		handlerWait.Done()
+		if handlerWait != nil {
+			handlerWait.Done()
+		}
 	}
 }
 
