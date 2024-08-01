@@ -48,7 +48,7 @@ func getDialURL() string {
 		"user": AmqpUser,
 		"port": AmqpPort,
 		"instance": InstanceId,
-	}).Infof("AMQP Dial URL")
+	}).Debugf("AMQP Dial URL")
 
 	return fmt.Sprintf("amqp://%v:%v@%v:%v", AmqpUser, AmqpPass, AmqpHost, AmqpPort)
 }
@@ -243,7 +243,7 @@ func consumeWithChannel(consumerReady *sync.WaitGroup, handlerWait *sync.WaitGro
 		return 
 	}
 
-	log.Infof("Consumer channel creating for: %v", deliveryTag)
+	log.Debugf("Consumer channel creating for: %v", deliveryTag)
 
 	deliveries, err := c.Consume(
 		queueName,  // name
