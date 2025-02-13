@@ -1,2 +1,3 @@
 default:
+	go generate
 	go build ./...

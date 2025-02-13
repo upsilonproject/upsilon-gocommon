@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+option go_package = "pkg/amqpproto";
+
+message Startup {
+	string Hostname = 1;
+}
+
+message Heartbeat {
+	int64 UnixTimestamp = 1;
+	string Hostname = 2;
+	string Version = 3;
+	string Type = 4;
+	string StatusLine = 5;
+}
+
+message ExecutionResult {
+	int64 UnixTimestamp = 1;
+	string Stdout = 2;
+	string Stderr = 3;
+	string Runerr = 4;
+	string Name = 5;
+	string Hostname = 6;
+	int64 ExitCode = 7;
+}
+
+message ExecutionRequest {
+	string Hostname = 1;
+	string CommandName = 2;
+}
+
+message PingRequest {
+
+}
+
+message PingResponse {
+	string Hostname = 1;
+}
+
+message UpdateRequest {}
+
+message GitPullRequest {
+	string GitUrl = 1;
+	string GitUrlAlias = 2;
+}
+
+message Event {
+	string Hostname = 1;
+	string Content = 2;
+}
