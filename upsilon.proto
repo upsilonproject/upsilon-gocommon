@@ -56,6 +56,8 @@ message ReportRequest {
 message ReportResponse {
 	repeated ReportColumn Columns = 1;
 	repeated ReportRow Rows = 2;
+	string ValueColumnName = 3;
+	map<string, ValueThreshold> Thresholds = 4;
 }
 
 message ReportColumn {
@@ -65,4 +67,12 @@ message ReportColumn {
 
 message ReportRow {
 	map<string, string> Cells = 1;
+	int64 Value = 2;
+	string Type = 3;
+}
+
+message ValueThreshold {
+	float Min = 1;
+	float Max = 2;
+	string ConditionName = 3;
 }
