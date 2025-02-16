@@ -48,3 +48,21 @@ message Event {
 	string Hostname = 1;
 	string Content = 2;
 }
+
+message ReportRequest {
+	bool includeGood = 1;
+}
+
+message ReportResponse {
+	repeated ReportColumn Columns = 1;
+	repeated ReportRow Rows = 2;
+}
+
+message ReportColumn {
+	string Type = 1;
+	string Header = 2;
+}
+
+message ReportRow {
+	map<string, string> Cells = 1;
+}
